@@ -1,0 +1,20 @@
+This repository contains a hardware prefetcher based on a basic cache simulator written in C/C++. And simulated memory hierarchy is described as below:
+- L1 Data Cache
+  - 32KB Size
+  - 2-way set associative
+  - 16 byte line size
+  - write-through
+  - no-write-allocate
+  - 1 cycle hit time
+  - 10 entry write-buffer
+- L2 Cache (data only)
+  - 256KB Size
+  - 8-way set associative
+  - 32 bytes line size
+  - write-back
+  - write-allocate
+  - 20 cycle access time (fully pipelined)
+- Main Memory
+  - 50 cycle access time (not pipelined)
+  - accesses to main memory are held in a FIFO queue with 10 entries
+  - L2 cache will no longer accept requests if the FIFO is full
