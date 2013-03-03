@@ -3,6 +3,13 @@
 
 #define MAX_STATE_COUNT 256
 #define MAX_REQUEST_COUNT 10
+#define NULL_STATE 0xFFFF
+#define PREFETCH_DEGREE 4
+#define L1_CACHE_BLOCK 16
+#define L2_CACHE_BLOCK 32
+
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #include <sys/types.h>
 #include <stdio.h>
@@ -38,6 +45,7 @@ class Prefetcher {
   void insertHistoryState(u_int32_t, u_int32_t, u_int16_t, u_int16_t, u_int16_t);
   void updateHistoryState();
   State queryHistoryState(u_int32_t);
+  u_int16_t getSecondLRUState();
 
   // Local request queue operations
   void initLocalRequest();
