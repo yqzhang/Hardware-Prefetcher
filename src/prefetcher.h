@@ -1,12 +1,45 @@
 #ifndef PREFETCHER_H
 #define PREFETCHER_H
 
+#define MAX_STATE_COUNT 256
+#define MAX_REQUEST_COUNT 10
+
 #include <sys/types.h>
+#include <stdio.h>
 
 struct Request;
 
+struct State {
+  u_int32_t pc;     // PC of the state
+  u_int32_t addr;   // Last access address
+  u_int16_t count;  // Access counter
+  u_int16_t offset; // Access offset
+  u_int16_t ahead;  // Accesses prefetched ahead
+  u_int16_t next;   // Next state for LRU
+};
+
 class Prefetcher {
+  private:
+  // History state table - Size: sizeof(State) * MAX_STATE_COUNT = 4KB
+  u_int32_t stateCount;
+  u_int32_t stateHead;
+  State historyState[MAX_STATE_COUNT];
+
+  // Local request queue
+  u_int32_t frontRequest;
+  u_int32_t rearRequest;
+  u_int32_t localRequest[MAX_REQUEST_COUNT];
+
+  // History state table operations
+  // TODO
+
+  // Local request queue operations
+  // TODO
+
   public:
+  // Construction function
+  Prefetcher();
+
 	// should return true if a request is ready for this cycle
 	bool hasRequest(u_int32_t cycle);
 
