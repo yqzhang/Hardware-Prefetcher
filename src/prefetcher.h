@@ -32,9 +32,20 @@ class Prefetcher {
 
   // History state table operations
   // TODO
+  void initHistoryState();
+  bool ifEmptyHistoryState();
+  bool ifFullHistoryState();
+  void insertHistoryState(u_int32_t, u_int32_t, u_int16_t, u_int16_t, u_int16_t);
+  void updateHistoryState();
+  State queryHistoryState(u_int32_t);
 
   // Local request queue operations
-  // TODO
+  void initLocalRequest();
+  bool ifEmptyLocalRequest();
+  bool ifFullLocalRequest();
+  bool enLocalRequest(u_int32_t);
+  u_int32_t deLocalRequest();
+  u_int32_t getFrontLocalRequest();
 
   public:
   // Construction function
