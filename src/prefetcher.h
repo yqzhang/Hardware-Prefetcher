@@ -2,9 +2,9 @@
 #define PREFETCHER_H
 
 #define MAX_STATE_COUNT 256
-#define MAX_REQUEST_COUNT 10
+#define MAX_REQUEST_COUNT 100
 #define NULL_STATE 0xFFFF
-#define PREFETCH_DEGREE 4
+#define PREFETCH_DEGREE 8
 #define L1_CACHE_BLOCK 16
 #define L2_CACHE_BLOCK 32
 
@@ -20,7 +20,7 @@ struct State {
   u_int32_t pc;     // PC of the state
   u_int32_t addr;   // Last access address
   u_int16_t count;  // Access counter
-  u_int16_t offset; // Access offset
+  int16_t offset;   // Access offset
   u_int16_t ahead;  // Accesses prefetched ahead
   u_int16_t next;   // Next state for LRU
 };
@@ -43,8 +43,7 @@ class Prefetcher {
   bool ifEmptyHistoryState();
   bool ifFullHistoryState();
   void insertHistoryState(u_int32_t, u_int32_t, u_int16_t, u_int16_t, u_int16_t);
-  void updateHistoryState();
-  State queryHistoryState(u_int32_t);
+  u_int16_t queryHistoryState(u_int32_t);
   u_int16_t getSecondLRUState();
 
   // Local request queue operations

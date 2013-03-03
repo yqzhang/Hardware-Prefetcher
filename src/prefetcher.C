@@ -21,33 +21,72 @@ void Prefetcher::completeRequest(u_int32_t cycle) {
 }
 
 void Prefetcher::cpuRequest(Request req) {
-  if (req.HitL1) {
+  //if (req.HitL1 || req.HitL2) {
     u_int16_t index = queryHistoryState(req.pc);
     if (index == NULL_STATE) {
       insertHistoryState(req.pc, req.addr, 1, 0, 0);
-      printf("weired\n");
     }
     else {
       // Second time
-      if (historyState[index].time == 1) {
+      if (historyState[index].count == 1) {
+        historyState[index].offset = (int16_t)((int64_t)req.addr) - ((int64_t)historyState[index].addr);
+        historyState[index].addr = req.addr;
+        historyState[index].count++;
+        if (req.HitL1) {
+          if (historyState[index].offset > 0) {
+            historyState[index].ahead = (L1_CACHE_BLOCK - (req.addr % L1_CACHE_BLOCK)) / historyState[index].offset;
+          }
+          else if (historyState[index].offset < 0) {
+            historyState[index].ahead = (req.addr % L1_CACHE_BLOCK) / (- historyState[index].offset);
+          }
+          else {
+            historyState[index].ahead = 0;
+          }
+        }
+        else {
+          if (historyState[index].offset > 0) {
+            historyState[index].ahead = (L2_CACHE_BLOCK - (req.addr % L2_CACHE_BLOCK)) / historyState[index].offset;
+          }
+          else if (historyState[index].offset < 0) {
+            historyState[index].ahead = (req.addr % L2_CACHE_BLOCK) / (- historyState[index].offset);
+          }
+          else {
+            historyState[index].ahead = 0;
+          }
+        }
+      }
+      else {
         historyState[index].offset = req.addr - historyState[index].addr;
         historyState[index].addr = req.addr;
         historyState[index].count++;
-        historyState[index].ahead = (L1_CACHE_BLOCK - (req.addr % L1_CACHE_BLOCK)) / historyState[index].offset;
-      }
-      else {
-        historyState[index].offset = req.addr - hitoryState[index].addr;
-        historyState[index].addr = req.addr;
-        historyState[index].count++;
-        historyState[index].ahead--;
+        if (historyState[index].offset != 0) {
+          historyState[index].ahead--;
+        }
       }
 
       // Prefetch MIN(count, PREFETCH_DEGREE)
-      while (historyState[index].ahead < MIN(historyState[index].count, PREFETCH_DEGREE)) {
-        u_int32_t addr = historyState[index].addr + historyState[index].offset *
-                       (historyState[index].ahead + 1);
-        enLocalRequest(addr);
-        historyState[index].ahead += (L1_CACHE_BLOCK - (addr % L1_CACHE_BLOCK)) / historyState[index].offset;
+      if (historyState[index].offset != 0) {
+        while (historyState[index].ahead < MIN(historyState[index].count, PREFETCH_DEGREE)) {
+          u_int32_t addr = historyState[index].addr + historyState[index].offset *
+                           (historyState[index].ahead + 1);
+          enLocalRequest(addr);
+          if (req.HitL1) {
+            if (historyState[index].offset > 0) {
+              historyState[index].ahead += (L1_CACHE_BLOCK - (addr % L1_CACHE_BLOCK)) / historyState[index].offset + 1;
+            }
+            else {
+              historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
+            }
+          }
+          else {
+            if (historyState[index].offset < 0) {
+              historyState[index].ahead += (L2_CACHE_BLOCK - (addr % L2_CACHE_BLOCK)) / historyState[index].offset + 1;
+            }
+            else {
+              historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
+            }
+          }
+        }
       }
 
       //Place to the most recent used head
@@ -84,10 +123,17 @@ void Prefetcher::cpuRequest(Request req) {
         stateHead = next;
       }
     }
-  }
-  else if (req.HitL2) {
-
-  }
+  //}
+  /*else {
+    // TODO
+    u_int16_t index = queryHistoryState(req.pc);
+    if (index == NULL_STATE) {
+      insertHistoryState(req.pc, req.addr, 1, 0, 0);
+    }
+    else {
+      printf("impossible\n");
+    }
+  }*/
 }
 
 // History state table operations
@@ -134,13 +180,9 @@ void Prefetcher::insertHistoryState(u_int32_t pc, u_int32_t addr, u_int16_t coun
   }
 }
 
-void updateHistoryState() {
-
-}
-
-u_int16_t queryHistoryState(u_int32_t pc) {
+u_int16_t Prefetcher::queryHistoryState(u_int32_t pc) {
   u_int16_t i;
-  for (i = stateHead; historyState[i].next != NULL_STATE; i = historyState[i].next ) {
+  for (i = stateHead; i != NULL_STATE; i = historyState[i].next ) {
     if (historyState[i].pc == pc) {
       return i;
     }
@@ -148,14 +190,17 @@ u_int16_t queryHistoryState(u_int32_t pc) {
   return NULL_STATE;
 }
 
-u_int32_t Prefetcher::getSecondLRUState() {
-  u_int32_t i;
+u_int16_t Prefetcher::getSecondLRUState() {
+  u_int16_t i;
   for (i = 0; i < MAX_STATE_COUNT; i++) {
-    if (historyState[historyState[i].next].next == NULL_STATE) {
+    if (historyState[i].next == NULL_STATE) {
+      continue;
+    }
+    else if (historyState[historyState[i].next].next == NULL_STATE) {
       return i;
     }
   }
-  printf("Error -- from Prefetcher::getSecondLRUState()")
+  printf("Error -- from Prefetcher::getSecondLRUState()");
 }
 
 // Local request queue operations
@@ -163,17 +208,16 @@ void Prefetcher::initLocalRequest() {
   frontRequest = rearRequest = 0;
 }
 
-bool ifEmptyLocalRequest() {
+bool Prefetcher::ifEmptyLocalRequest() {
   return (frontRequest == rearRequest);
 }
 
-bool ifFullLocalRequest() {
+bool Prefetcher::ifFullLocalRequest() {
   return (frontRequest == (rearRequest + 1) % MAX_REQUEST_COUNT);
 }
 
-bool enLocalRequest(u_int32_t addr) {
+bool Prefetcher::enLocalRequest(u_int32_t addr) {
   if (ifFullLocalRequest()) {
-    printf("Local Request full!\n");
     return false;
   }
   else {
@@ -183,7 +227,7 @@ bool enLocalRequest(u_int32_t addr) {
   }
 }
 
-u_int32_t deLocalRequest() {
+u_int32_t Prefetcher::deLocalRequest() {
   if (ifEmptyLocalRequest()) {
     return 0;
   }
@@ -194,6 +238,6 @@ u_int32_t deLocalRequest() {
   }
 }
 
-u_int32_t getFrontLocalRequest() {
+u_int32_t Prefetcher::getFrontLocalRequest() {
   return localRequest[frontRequest];
 }
