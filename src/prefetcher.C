@@ -7,13 +7,13 @@ Prefetcher::Prefetcher() {
 }
 
 bool Prefetcher::hasRequest(u_int32_t cycle) {
-	return (!ifEmptyLocalRequest());
+  return (!ifEmptyLocalRequest());
 }
 
 Request Prefetcher::getRequest(u_int32_t cycle) {
-	Request req;
+  Request req;
   req.addr = getFrontLocalRequest();
-	return req;
+  return req;
 }
 
 void Prefetcher::completeRequest(u_int32_t cycle) {
