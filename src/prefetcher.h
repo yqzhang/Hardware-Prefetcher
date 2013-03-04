@@ -1,10 +1,11 @@
 #ifndef PREFETCHER_H
 #define PREFETCHER_H
 
-#define MAX_STATE_COUNT 256
-#define MAX_REQUEST_COUNT 100
+#define MAX_STATE_COUNT 64
+#define MAX_REQUEST_COUNT 64
 #define NULL_STATE 0xFFFF
-#define PREFETCH_DEGREE 8
+#define L1_PREFETCH_DEGREE 32
+#define L2_PREFETCH_DEGREE 16
 #define L1_CACHE_BLOCK 16
 #define L2_CACHE_BLOCK 32
 
@@ -27,7 +28,7 @@ struct State {
 
 class Prefetcher {
   private:
-  // History state table - Size: sizeof(State) * MAX_STATE_COUNT = 4KB
+  // History state table - Size: sizeof(State) * MAX_STATE_COUNT
   u_int32_t stateCount;
   u_int32_t stateHead;
   State historyState[MAX_STATE_COUNT];
@@ -38,7 +39,6 @@ class Prefetcher {
   u_int32_t localRequest[MAX_REQUEST_COUNT];
 
   // History state table operations
-  // TODO
   void initHistoryState();
   bool ifEmptyHistoryState();
   bool ifFullHistoryState();

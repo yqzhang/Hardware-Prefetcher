@@ -21,119 +21,114 @@ void Prefetcher::completeRequest(u_int32_t cycle) {
 }
 
 void Prefetcher::cpuRequest(Request req) {
-  //if (req.HitL1 || req.HitL2) {
-    u_int16_t index = queryHistoryState(req.pc);
-    if (index == NULL_STATE) {
-      insertHistoryState(req.pc, req.addr, 1, 0, 0);
+  u_int16_t index = queryHistoryState(req.pc);
+  if (index == NULL_STATE) {
+    insertHistoryState(req.pc, req.addr, 1, 0, 0);
+  }
+  else {
+    // Second time
+    if (historyState[index].count == 1) {
+      historyState[index].offset = (int16_t)((int64_t)req.addr) - ((int64_t)historyState[index].addr);
+      historyState[index].addr = req.addr;
+      historyState[index].count++;
+      if (req.HitL1) {
+        if (historyState[index].offset > 0) {
+          historyState[index].ahead = (L1_CACHE_BLOCK - (req.addr % L1_CACHE_BLOCK)) / historyState[index].offset;
+        }
+        else if (historyState[index].offset < 0) {
+          historyState[index].ahead = (req.addr % L1_CACHE_BLOCK) / (- historyState[index].offset);
+        }
+        else {
+          historyState[index].ahead = 0;
+        }
+      }
+      else {
+        if (historyState[index].offset > 0) {
+          historyState[index].ahead = (L2_CACHE_BLOCK - (req.addr % L2_CACHE_BLOCK)) / historyState[index].offset;
+        }
+        else if (historyState[index].offset < 0) {
+          historyState[index].ahead = (req.addr % L2_CACHE_BLOCK) / (- historyState[index].offset);
+        }
+        else {
+          historyState[index].ahead = 0;
+        }
+      }
     }
     else {
-      // Second time
-      if (historyState[index].count == 1) {
-        historyState[index].offset = (int16_t)((int64_t)req.addr) - ((int64_t)historyState[index].addr);
-        historyState[index].addr = req.addr;
+      u_int16_t previous = historyState[index].offset;
+      historyState[index].offset = req.addr - historyState[index].addr;
+      historyState[index].addr = req.addr;
+      if (previous != historyState[index].offset) {
+        historyState[index].count = 1;
+      }
+      else {
         historyState[index].count++;
+      }
+      if (historyState[index].offset != 0) {
+        historyState[index].ahead--;
+      }
+    }
+
+    // Prefetch MIN(count, PREFETCH_DEGREE)
+    if (historyState[index].offset != 0) {
+      u_int16_t prefetchDegree = (req.HitL1) ? (L1_PREFETCH_DEGREE) : (L2_PREFETCH_DEGREE);
+      while (historyState[index].ahead < MIN(historyState[index].count, prefetchDegree)) {
+        u_int32_t addr = (int64_t)historyState[index].addr + (int64_t)(historyState[index].offset) *
+                         ((int64_t)historyState[index].ahead + 1);
+        enLocalRequest(addr);
         if (req.HitL1) {
           if (historyState[index].offset > 0) {
-            historyState[index].ahead = (L1_CACHE_BLOCK - (req.addr % L1_CACHE_BLOCK)) / historyState[index].offset;
-          }
-          else if (historyState[index].offset < 0) {
-            historyState[index].ahead = (req.addr % L1_CACHE_BLOCK) / (- historyState[index].offset);
+            historyState[index].ahead += (L1_CACHE_BLOCK - (addr % L1_CACHE_BLOCK)) / historyState[index].offset + 1;
           }
           else {
-            historyState[index].ahead = 0;
+            historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
           }
         }
         else {
           if (historyState[index].offset > 0) {
-            historyState[index].ahead = (L2_CACHE_BLOCK - (req.addr % L2_CACHE_BLOCK)) / historyState[index].offset;
-          }
-          else if (historyState[index].offset < 0) {
-            historyState[index].ahead = (req.addr % L2_CACHE_BLOCK) / (- historyState[index].offset);
+            historyState[index].ahead += (L2_CACHE_BLOCK - (addr % L2_CACHE_BLOCK)) / historyState[index].offset + 1;
           }
           else {
-            historyState[index].ahead = 0;
+            historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
           }
         }
-      }
-      else {
-        historyState[index].offset = req.addr - historyState[index].addr;
-        historyState[index].addr = req.addr;
-        historyState[index].count++;
-        if (historyState[index].offset != 0) {
-          historyState[index].ahead--;
-        }
-      }
-
-      // Prefetch MIN(count, PREFETCH_DEGREE)
-      if (historyState[index].offset != 0) {
-        while (historyState[index].ahead < MIN(historyState[index].count, PREFETCH_DEGREE)) {
-          u_int32_t addr = historyState[index].addr + historyState[index].offset *
-                           (historyState[index].ahead + 1);
-          enLocalRequest(addr);
-          if (req.HitL1) {
-            if (historyState[index].offset > 0) {
-              historyState[index].ahead += (L1_CACHE_BLOCK - (addr % L1_CACHE_BLOCK)) / historyState[index].offset + 1;
-            }
-            else {
-              historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
-            }
-          }
-          else {
-            if (historyState[index].offset < 0) {
-              historyState[index].ahead += (L2_CACHE_BLOCK - (addr % L2_CACHE_BLOCK)) / historyState[index].offset + 1;
-            }
-            else {
-              historyState[index].ahead += (addr % L1_CACHE_BLOCK) / (- historyState[index].offset) + 1;
-            }
-          }
-        }
-      }
-
-      //Place to the most recent used head
-      if (historyState[index].next == NULL_STATE) {
-        u_int16_t prev = getSecondLRUState();
-
-        historyState[prev].next = NULL_STATE;
-        historyState[index].next = stateHead;
-        stateHead = index;
-      }
-      else {
-        u_int16_t next = historyState[index].next;
-
-        State temp;
-        temp.pc     = historyState[index].pc;
-        temp.addr   = historyState[index].addr;
-        temp.count  = historyState[index].count;
-        temp.offset = historyState[index].offset;
-        temp.ahead  = historyState[index].ahead;
-
-        historyState[index].pc      = historyState[next].pc;
-        historyState[index].addr    = historyState[next].addr;
-        historyState[index].count   = historyState[next].count;
-        historyState[index].offset  = historyState[next].offset;
-        historyState[index].ahead   = historyState[next].ahead;
-        historyState[index].next    = historyState[next].next;
-
-        historyState[next].pc     = temp.pc;
-        historyState[next].addr   = temp.addr;
-        historyState[next].count  = temp.count;
-        historyState[next].offset = temp.offset;
-        historyState[next].ahead  = temp.ahead;
-        historyState[next].next   = stateHead;
-        stateHead = next;
       }
     }
-  //}
-  /*else {
-    // TODO
-    u_int16_t index = queryHistoryState(req.pc);
-    if (index == NULL_STATE) {
-      insertHistoryState(req.pc, req.addr, 1, 0, 0);
+
+    //Place to the most recent used head
+    if (historyState[index].next == NULL_STATE) {
+      u_int16_t prev = getSecondLRUState();
+
+      historyState[prev].next = NULL_STATE;
+      historyState[index].next = stateHead;
+      stateHead = index;
     }
     else {
-      printf("impossible\n");
+      u_int16_t next = historyState[index].next;
+
+      State temp;
+      temp.pc     = historyState[index].pc;
+      temp.addr   = historyState[index].addr;
+      temp.count  = historyState[index].count;
+      temp.offset = historyState[index].offset;
+      temp.ahead  = historyState[index].ahead;
+
+      historyState[index].pc      = historyState[next].pc;
+      historyState[index].addr    = historyState[next].addr;
+      historyState[index].count   = historyState[next].count;
+      historyState[index].offset  = historyState[next].offset;
+      historyState[index].ahead   = historyState[next].ahead;
+      historyState[index].next    = historyState[next].next;
+
+      historyState[next].pc     = temp.pc;
+      historyState[next].addr   = temp.addr;
+      historyState[next].count  = temp.count;
+      historyState[next].offset = temp.offset;
+      historyState[next].ahead  = temp.ahead;
+      historyState[next].next   = stateHead;
+      stateHead = next;
     }
-  }*/
+  }
 }
 
 // History state table operations
