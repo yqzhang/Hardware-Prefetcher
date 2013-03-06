@@ -1,0 +1,29 @@
+Version 1.6 (Feb 15, 2009):
+- Fixed bug where the simulator will hang in some benchmarks.
+
+Version 1.5 (Dec 3, 2007):
+- Fixed bug where store request coming from memory queue would prematurely
+end a CPU load request (sorry, but this fix often decreases performance).
+- Fixed a bug where stores coming from memory queue were updating the
+D-cache erroneously.
+- setStatus() in CPU class doesn't return anything so it is now declared
+to return void.
+
+Version 1.4 (Nov 28, 2007):
+- Fixed bug in main.C where stale prefetcher requests rather than the
+desired CPU request were getting added to L2 queue after entering 
+STALLED_L2 state.
+
+Version 1.3 (Nov 22, 2007):
+- Added check in main.C to make sure all requests from the prefetcher are
+labeled as loads.
+
+Version 1.2 (Nov 20, 2007):
+- Fixed bug in readNextRequest() of CPU that marked all accesses as loads.
+
+Version 1.1 (Nov 18, 2007):
+- Fixed bug in findDup() function of memQueue.
+- Added printQueue() helper function.
+
+Version 1.0:
+- Initial Version

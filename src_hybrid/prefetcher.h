@@ -1,16 +1,27 @@
 #ifndef PREFETCHER_H
 #define PREFETCHER_H
 
-#define MAX_STATE_COUNT 256
+#define MAX_STATE_COUNT 64
 #define MAX_REQUEST_COUNT 32
 #define NULL_STATE 0xFFFF
-#define L1_PREFETCH_DEGREE 8
-#define L2_PREFETCH_DEGREE 12
 #define L1_CACHE_BLOCK 16
 #define L2_CACHE_BLOCK 32
 
+#define DEFAULT_OFFSET 32
+#define DEFAULT_AHEAD  2
+
+#define MAX_PREFETCH_DEGREE 16
+#define L1_PREFETCH_DEGREE 16
+#define L2_PREFETCH_DEGREE 16
+
+#define STATE_INIT   0
+#define STATE_TRANS  1
+#define STATE_STEADY 2
+#define STATE_NO_PRE 3
+
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define ABS(x)    (((x) < 0) ? -(x) : (x))
 
 #include <sys/types.h>
 #include <stdio.h>
@@ -24,6 +35,7 @@ struct State {
   int16_t offset;   // Access offset
   u_int16_t ahead;  // Accesses prefetched ahead
   u_int16_t next;   // Next state for LRU
+  u_int8_t state;   // "state" of state
 };
 
 class Prefetcher {
@@ -42,7 +54,7 @@ class Prefetcher {
   void initHistoryState();
   bool ifEmptyHistoryState();
   bool ifFullHistoryState();
-  void insertHistoryState(u_int32_t, u_int32_t, u_int16_t, int16_t, u_int16_t);
+  void insertHistoryState(u_int32_t, u_int32_t, u_int16_t, int16_t, u_int16_t, u_int8_t);
   u_int16_t queryHistoryState(u_int32_t);
   u_int16_t getSecondLRUState();
 
@@ -50,10 +62,15 @@ class Prefetcher {
   void initLocalRequest();
   bool ifEmptyLocalRequest();
   bool ifFullLocalRequest();
-  bool enLocalRequest(u_int32_t);
+  bool enLocalRequest(u_int32_t, bool);
   u_int32_t deLocalRequest();
   u_int32_t getFrontLocalRequest();
-  bool ifAlreadyInQueue(u_int32_t);
+  bool ifAlreadyInQueue(u_int32_t, bool);
+
+  // Prefetch algorithm
+  void streamPrefetch(u_int32_t, int16_t, u_int16_t, bool);
+  void stridePrefetch(u_int32_t, int16_t, u_int16_t, u_int16_t&, bool);
+  u_int32_t getMostLikelyCount(u_int16_t count);
 
   public:
   // Construction function

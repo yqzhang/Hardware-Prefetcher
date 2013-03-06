@@ -24,6 +24,8 @@ void Prefetcher::cpuRequest(Request req) {
   u_int16_t index = queryHistoryState(req.pc);
   if (index == NULL_STATE) {
     insertHistoryState(req.pc, req.addr, 1, 0, 0);
+    enLocalRequest(req.addr + 32);
+    enLocalRequest(req.addr + 64);
   }
   else {
     // Second time
@@ -55,11 +57,13 @@ void Prefetcher::cpuRequest(Request req) {
       }
     }
     else {
-      u_int16_t previous = historyState[index].offset;
-      historyState[index].offset = req.addr - historyState[index].addr;
+      int16_t previous = historyState[index].offset;
+      historyState[index].offset = (int64_t)req.addr - (int64_t)historyState[index].addr;
       historyState[index].addr = req.addr;
       if (previous != historyState[index].offset) {
         historyState[index].count = 1;
+        enLocalRequest(req.addr + 32);
+        enLocalRequest(req.addr + 64);
       }
       else {
         historyState[index].count++;
@@ -69,10 +73,10 @@ void Prefetcher::cpuRequest(Request req) {
       }
     }
 
-    // Prefetch MIN(count, PREFETCH_DEGREE)
+    // Prefetch MIN(count - 1, PREFETCH_DEGREE)
     if (historyState[index].offset != 0) {
       u_int16_t prefetchDegree = (req.HitL1) ? (L1_PREFETCH_DEGREE) : (L2_PREFETCH_DEGREE);
-      while (historyState[index].ahead < MIN(historyState[index].count, prefetchDegree)) {
+      while (historyState[index].ahead < MIN(historyState[index].count - 1, prefetchDegree)) {
         u_int32_t addr = (int64_t)historyState[index].addr + (int64_t)(historyState[index].offset) *
                          ((int64_t)historyState[index].ahead + 1);
         enLocalRequest(addr);
@@ -145,7 +149,7 @@ bool Prefetcher::ifFullHistoryState() {
   return (stateCount == MAX_STATE_COUNT);
 }
 
-void Prefetcher::insertHistoryState(u_int32_t pc, u_int32_t addr, u_int16_t count, u_int16_t offset, u_int16_t ahead) {
+void Prefetcher::insertHistoryState(u_int32_t pc, u_int32_t addr, u_int16_t count, int16_t offset, u_int16_t ahead) {
   if (!ifFullHistoryState()) {
     // Insert state when table is not full
     historyState[stateCount].pc     = pc;
@@ -212,6 +216,11 @@ bool Prefetcher::ifFullLocalRequest() {
 }
 
 bool Prefetcher::enLocalRequest(u_int32_t addr) {
+  if (ifAlreadyInQueue(addr)) {
+    //printf("full\n");
+    return false;
+  }
+
   if (ifFullLocalRequest()) {
     return false;
   }
@@ -235,4 +244,14 @@ u_int32_t Prefetcher::deLocalRequest() {
 
 u_int32_t Prefetcher::getFrontLocalRequest() {
   return localRequest[frontRequest];
+}
+
+bool Prefetcher::ifAlreadyInQueue(u_int32_t addr) {
+  u_int32_t i;
+  for (i = frontRequest; i % MAX_REQUEST_COUNT < rearRequest; i++) {
+    if (localRequest[i % MAX_REQUEST_COUNT] / 32 == addr / 32) {
+      return true;
+    }
+  }
+  return false;
 }
