@@ -1,3 +1,9 @@
+/**
+ * Name:  Yunqi Zhang
+ * PID:   A53030068
+ * Email: yqzhang@ucsd.edu
+ */
+
 #include "prefetcher.h"
 #include "mem-sim.h"
 
@@ -26,7 +32,7 @@ void Prefetcher::cpuRequest(Request req) {
   // Not in the history state table
   if (index == NULL_STATE) {
     insertHistoryState(req.pc, req.addr, 1, DEFAULT_OFFSET, DEFAULT_AHEAD, STATE_INIT);
-    streamPrefetch(req.addr, DEFAULT_OFFSET, DEFAULT_AHEAD, req.HitL1);
+    sequentialPrefetch(req.addr, DEFAULT_OFFSET, DEFAULT_AHEAD, req.HitL1);
   }
   // Already in the history state table
   else {
@@ -47,6 +53,7 @@ void Prefetcher::cpuRequest(Request req) {
         historyState[index].count = 1;
         historyState[index].offset= offset;
         historyState[index].ahead = DEFAULT_AHEAD;
+        sequentialPrefetch(req.addr, NOT_HIT_OFFSET, NOT_HIT_AHEAD, req.HitL1);
       }
       break;
     case STATE_TRANS:
@@ -63,11 +70,12 @@ void Prefetcher::cpuRequest(Request req) {
         historyState[index].count = 1;
         historyState[index].offset= offset;
         historyState[index].ahead = DEFAULT_AHEAD;
-        streamPrefetch(req.addr, offset, DEFAULT_AHEAD, req.HitL1);
+        sequentialPrefetch(req.addr, NOT_HIT_OFFSET, NOT_HIT_AHEAD, req.HitL1);
       }
       break;
     case STATE_STEADY:
       if (offset == historyState[index].offset) {
+        historyState[index].state = STATE_STEADY;
         historyState[index].addr  = req.addr;
         historyState[index].count += 4;
         historyState[index].ahead --;
@@ -79,23 +87,23 @@ void Prefetcher::cpuRequest(Request req) {
         historyState[index].offset= offset;
         historyState[index].count = 1;
         historyState[index].ahead = DEFAULT_AHEAD;
-        streamPrefetch(req.addr, offset, DEFAULT_AHEAD, req.HitL1);
+        sequentialPrefetch(req.addr, NOT_HIT_OFFSET, NOT_HIT_AHEAD, req.HitL1);
       }
       break;
     case STATE_NO_PRE:
       if (offset == historyState[index].offset) {
-        historyState[index].state = STATE_STEADY;
+        historyState[index].state = STATE_TRANS;
         historyState[index].addr  = req.addr;
         historyState[index].count = 2;
         historyState[index].ahead --;
-        streamPrefetch(req.addr, offset, DEFAULT_AHEAD, req.HitL1);
+        sequentialPrefetch(req.addr, offset, historyState[index].ahead, req.HitL1);
       }
       else {
         historyState[index].addr  = req.addr;
         historyState[index].count = 1;
         historyState[index].offset= offset;
         historyState[index].ahead = DEFAULT_AHEAD;
-        streamPrefetch(req.addr, DEFAULT_OFFSET, DEFAULT_AHEAD, req.HitL1);
+        sequentialPrefetch(req.addr, NOT_HIT_OFFSET, NOT_HIT_AHEAD, req.HitL1);
       }
       break;
     default:
@@ -269,57 +277,28 @@ bool Prefetcher::ifAlreadyInQueue(u_int32_t addr, bool HitL1) {
   return false;
 }
 
-void Prefetcher::streamPrefetch(u_int32_t addr, int16_t offset, u_int16_t ahead, bool HitL1) {
-  u_int16_t i;
+void Prefetcher::sequentialPrefetch(u_int32_t addr, int16_t offset, u_int16_t ahead, bool HitL1) {
+  int16_t i;
   if (offset != 0) {
-    for (i = 1; i <= ahead; i++) {
-      u_int32_t prefetch = (int64_t)addr + (int64_t)i * (int64_t)offset;
+    for (i = -1; i <= ahead; i++) {
+      u_int32_t prefetch;
+      prefetch = (int64_t)addr + (int64_t)i * (int64_t)offset;
       if (HitL1) {
         if (prefetch / L1_CACHE_BLOCK == addr / L1_CACHE_BLOCK) continue;
       }
       else {
         if (prefetch / L2_CACHE_BLOCK == addr / L2_CACHE_BLOCK) continue;
       }
-      enLocalRequest((int64_t)addr + (int64_t)i * (int64_t)offset, HitL1);
-    }
+      enLocalRequest(prefetch, false);
+    }  
   }
 }
 
 void Prefetcher::stridePrefetch(u_int32_t addr, int16_t offset, u_int16_t count, u_int16_t &ahead, bool HitL1) {
-  if (offset == 0) return ;
-
-  u_int32_t max_prefetch_degree = (HitL1) ? (L1_PREFETCH_DEGREE) : (L2_PREFETCH_DEGREE);
-  while (ahead < MIN(count, max_prefetch_degree)) {
-    ahead++;
-    enLocalRequest((int64_t)addr + (int64_t)ahead * (int64_t)offset, HitL1);
-  }
-}
-
-u_int32_t Prefetcher::getMostLikelyCount(u_int16_t count) {
-  u_int16_t i;
-  u_int32_t likely;
-  u_int64_t count_counter[MAX_PREFETCH_DEGREE + 1];
-
-  for (i = 0; i <= MAX_PREFETCH_DEGREE; i++) {
-    count_counter[i] = 0;
-  }
-
-  for (i = stateHead; i != NULL_STATE; i = historyState[i].next) {
-    if (historyState[i].state > 1) {
-      if (historyState[i].count < MAX_PREFETCH_DEGREE) {
-        count_counter[historyState[i].count] ++;
-      }
-      else {
-        count_counter[MAX_PREFETCH_DEGREE] ++;
-      }
+  if (offset != 0) {
+    while (ahead < MIN(count, MAX_PREFETCH_DEGREE)) {
+      ahead++;
+      enLocalRequest((int64_t)addr + (int64_t)ahead * (int64_t)offset, HitL1);
     }
   }
-
-  for (i = 2, likely = 2; i <= MAX_PREFETCH_DEGREE; i++) {
-    if (count_counter[i] > count_counter[likely]) {
-      likely = i;
-    }
-  }
-
-  return likely;
 }

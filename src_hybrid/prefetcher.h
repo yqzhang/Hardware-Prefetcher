@@ -1,18 +1,25 @@
+/**
+ * Name:  Yunqi Zhang
+ * PID:   A53030068
+ * Email: yqzhang@ucsd.edu
+ */
+
 #ifndef PREFETCHER_H
 #define PREFETCHER_H
 
 #define MAX_STATE_COUNT 64
-#define MAX_REQUEST_COUNT 32
-#define NULL_STATE 0xFFFF
+#define MAX_REQUEST_COUNT 64
+#define NULL_STATE 0xFF
 #define L1_CACHE_BLOCK 16
 #define L2_CACHE_BLOCK 32
 
 #define DEFAULT_OFFSET 32
 #define DEFAULT_AHEAD  2
 
+#define NOT_HIT_OFFSET 16
+#define NOT_HIT_AHEAD  2
+
 #define MAX_PREFETCH_DEGREE 16
-#define L1_PREFETCH_DEGREE 16
-#define L2_PREFETCH_DEGREE 16
 
 #define STATE_INIT   0
 #define STATE_TRANS  1
@@ -29,13 +36,13 @@
 struct Request;
 
 struct State {
-  u_int32_t pc;     // PC of the state
-  u_int32_t addr;   // Last access address
-  u_int16_t count;  // Access counter
-  int16_t offset;   // Access offset
-  u_int16_t ahead;  // Accesses prefetched ahead
-  u_int16_t next;   // Next state for LRU
-  u_int8_t state;   // "state" of state
+  u_int32_t pc;     // PC of the state      - 32 bit
+  u_int32_t addr;   // Last access address  - 32 bit
+  u_int16_t count;  // Access counter       - 16 bit
+  int16_t offset;   // Access offset        - 16 bit
+  u_int16_t ahead;  // Prefetching ahead    - 16 bit
+  u_int8_t next;   // Next state for LRU   - 16 bit
+  u_int8_t state;   // "state" of state     - 8  bit
 };
 
 class Prefetcher {
@@ -68,9 +75,8 @@ class Prefetcher {
   bool ifAlreadyInQueue(u_int32_t, bool);
 
   // Prefetch algorithm
-  void streamPrefetch(u_int32_t, int16_t, u_int16_t, bool);
+  void sequentialPrefetch(u_int32_t, int16_t, u_int16_t, bool);
   void stridePrefetch(u_int32_t, int16_t, u_int16_t, u_int16_t&, bool);
-  u_int32_t getMostLikelyCount(u_int16_t count);
 
   public:
   // Construction function
